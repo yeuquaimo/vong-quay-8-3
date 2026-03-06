@@ -48,8 +48,8 @@
         
         .wheel-container {
             position: relative;
-            width: 400px;
-            height: 400px;
+            width: 550px;
+            height: 550px;
         }
         
         .pointer {
@@ -229,6 +229,79 @@
                 padding: 20px 0;
             }
         }
+        /* --- HIỆU ỨNG POPUP KẾT QUẢ --- */
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            /* Làm tối nền xung quanh */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            backdrop-filter: blur(5px);
+            /* Làm mờ vòng quay phía sau */
+        }
+        
+        .modal-content {
+            background: #ffffff;
+            padding: 50px 80px;
+            border-radius: 25px;
+            text-align: center;
+            box-shadow: 0 15px 40px rgba(255, 71, 87, 0.5);
+            border: 8px solid #ff4757;
+            /* Hiệu ứng nảy lên khi xuất hiện */
+            animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        @keyframes popIn {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .modal-content h2 {
+            color: #ff4757;
+            font-size: 2.5rem;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        
+        .winner-text {
+            font-size: 5rem;
+            /* Chữ siêu to khổng lồ */
+            font-weight: bold;
+            color: #2f3542;
+            margin: 20px 0 40px 0;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        #closeModalBtn {
+            padding: 15px 40px;
+            font-size: 22px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #ff6b81, #ff4757);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(255, 71, 87, 0.4);
+            transition: 0.2s;
+        }
+        
+        #closeModalBtn:hover {
+            transform: scale(1.05);
+        }
     </style>
 </head>
 
@@ -241,7 +314,7 @@
         <div class="wheel-section">
             <div class="wheel-container">
                 <div class="pointer"></div>
-                <canvas id="wheel" width="400" height="400"></canvas>
+                <canvas id="wheel" width="550" height="550"></canvas>
             </div>
             <button id="spinBtn">Quay Ngay!</button>
             <div id="result"></div>
@@ -249,6 +322,12 @@
 
         <div class="admin-panel">
             <h3>⚙️ Quản Lý Phần Thưởng</h3>
+            <div style="margin-bottom: 15px;">
+                <input type="file" id="fileInput" accept=".txt" style="display: none;">
+                <button id="importBtn" style="background: #2ed573; color: white; border: none; padding: 10px 15px; font-size: 14px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%; transition: 0.2s;">
+                    📁 Tải lên File danh sách (.txt)
+                </button>
+            </div>
             <div class="input-group">
                 <input type="text" id="newPrize" placeholder="Nhập tên phần thưởng mới...">
                 <button id="addBtn">Thêm Ô</button>
@@ -256,6 +335,13 @@
             <ul id="prizeList"></ul>
         </div>
 
+    </div>
+    <div id="resultModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>🎉 XIN CHÚC MỪNG 🎉</h2>
+            <div id="winnerName" class="winner-text">Tên Người Trúng</div>
+            <button id="closeModalBtn">Tuyệt vời! Quay tiếp nào</button>
+        </div>
     </div>
 
     <script>
@@ -276,6 +362,9 @@
         let currentRotation = 0;
         let isSpinning = false;
 
+        const resultModal = document.getElementById('resultModal');
+        const winnerName = document.getElementById('winnerName');
+        const closeModalBtn = document.getElementById('closeModalBtn');
         const canvas = document.getElementById('wheel');
         const ctx = canvas.getContext('2d');
         const spinBtn = document.getElementById('spinBtn');
@@ -283,6 +372,10 @@
         const prizeListEl = document.getElementById('prizeList');
         const newPrizeInput = document.getElementById('newPrize');
         const addBtn = document.getElementById('addBtn');
+        const fileInput = document.getElementById('fileInput');
+        const importBtn = document.getElementById('importBtn');
+
+
 
         // --- VẼ VÒNG QUAY ---
         function drawWheel() {
@@ -311,12 +404,32 @@
                 ctx.translate(centerX, centerY);
                 ctx.rotate(startAngle + sliceAngle / 2);
                 ctx.textAlign = "right";
+
+                // Thuật toán tự động tính cỡ chữ dựa trên số lượng ô
+                let fontSize = 24; // Cỡ chữ mặc định to rõ
+                if (numSlices > 10) fontSize = 20;
+                if (numSlices > 20) fontSize = 16;
+                if (numSlices > 30) fontSize = 12;
+                if (numSlices > 50) fontSize = 10;
+
+                ctx.font = `bold ${fontSize}px 'Segoe UI'`;
                 ctx.fillStyle = "#2f3542";
-                ctx.font = "bold 20px 'Segoe UI'";
-                ctx.fillText(prizes[i], radius - 20, 7);
+
+                // Giới hạn độ dài chữ hiển thị (nếu tên quá dài thì cắt bớt thêm dấu ...)
+                let displayText = prizes[i];
+                const maxTextLength = 20; // Giới hạn 20 ký tự
+                if (displayText.length > maxTextLength) {
+                    displayText = displayText.substring(0, maxTextLength) + '...';
+                }
+
+                ctx.fillText(displayText, radius - 30, fontSize / 3);
                 ctx.restore();
             }
         }
+        // Xử lý nút Đóng Popup
+        closeModalBtn.addEventListener('click', () => {
+            resultModal.style.display = 'none';
+        });
 
         // --- QUẢN LÝ DANH SÁCH (CRUD) ---
         function renderList() {
@@ -427,8 +540,60 @@
 
             setTimeout(() => {
                 isSpinning = false;
-                resultText.innerHTML = `🎉 Trúng: <span style="color: #e84118;">${prizes[targetSliceIndex]}</span> 🎉`;
+
+                // Cập nhật tên người trúng vào Popup
+                winnerName.innerText = prizes[targetSliceIndex];
+
+                // Hiển thị Popup lên
+                resultModal.style.display = 'flex';
+
             }, 5000);
+        });
+        // --- XỬ LÝ NHẬP FILE TXT ---
+        // Khi bấm nút Import, kích hoạt nút chọn file ẩn
+        importBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Khi người dùng đã chọn file xong
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+
+            // Khi file được đọc xong
+            reader.onload = function(e) {
+                const contents = e.target.result;
+
+                // Tách nội dung thành mảng theo từng dòng (xuống dòng)
+                // Lọc bỏ các khoảng trắng thừa và các dòng trống
+                const lines = contents.split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+
+                if (lines.length >= 2) {
+                    // Cập nhật lại danh sách phần thưởng bằng danh sách từ file
+                    prizes = lines;
+
+                    // Reset lại mục tiêu gian lận về ô đầu tiên để tránh lỗi vượt quá mảng
+                    riggedTargetIndex = 0;
+
+                    // Vẽ lại giao diện
+                    renderList();
+                    drawWheel();
+
+                    alert(`✅ Đã tải lên thành công ${lines.length} lựa chọn!`);
+                } else {
+                    alert("❌ File txt trống hoặc có ít hơn 2 dòng hợp lệ.");
+                }
+
+                // Xóa giá trị input để có thể chọn lại chính file đó lần sau nếu cần
+                fileInput.value = '';
+            };
+
+            // Bắt đầu đọc file dưới dạng Text
+            reader.readAsText(file);
         });
 
         // Khởi tạo
